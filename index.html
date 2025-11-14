@@ -312,6 +312,29 @@
             top: 90px; /* Position below address button */
         }
 
+        .drag-handle {
+            cursor: move;
+        }
+        .resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 15px;
+            height: 15px;
+            cursor: nwse-resize;
+            z-index: 10;
+        }
+        .resize-handle::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            border-bottom: 2px solid rgba(0,0,0,0.3);
+            border-right: 2px solid rgba(0,0,0,0.3);
+        }
+
 
 
         /* --- FONT SCALING FOR LARGE DISPLAYS --- */
@@ -342,12 +365,12 @@
         <div id="map"></div>
         
         <!-- Top Left Address Panel -->
-        <div class="absolute top-[210px] left-4 z-[1001]">
+        <div id="addressToggleContainer" class="absolute z-[3001] drag-handle" style="top: 210px; left: 1rem;">
             <button id="addressToggle" class="action-button" title="Εμφάνιση λίστας διευθύνσεων">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
             </button>
         </div>
-        <div id="addressPanel" class="absolute top-[260px] left-4 z-[1000] menu-hidden glass-panel rounded-lg shadow-md p-4 w-[320px]">
+        <div id="addressPanel" class="absolute z-[3000] menu-hidden glass-panel rounded-lg shadow-md p-4 w-[320px]" style="top: 260px; left: 1rem;">
             <div class="absolute top-2 right-2 flex gap-1 z-10"> <!-- New container for buttons -->
                 <button id="addressPanelReload" class="p-1 rounded-full hover:bg-gray-400/30 transition-colors" title="Ανανέωση λίστας">
                     <svg class="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004 12c0 2.972 1.154 5.661 3.042 7.707M20 20v-5h-.581m0 0a8.001 8.001 0 01-15.357-2A8.001 8.001 0 0120 12c0-2.972-1.154-5.661-3.042-7.707"></path></svg>
@@ -356,10 +379,11 @@
                     <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <h2 class="text-lg font-bold mb-2 text-gray-800">Σημεία Διαδρομής</h2>
+            <h2 id="addressPanelHeader" class="text-lg font-bold mb-2 text-gray-800 drag-handle" title="Μετακίνηση παραθύρου">Σημεία Διαδρομής</h2>
             <div id="addressList" class="overflow-y-auto pr-2">
                 <p id="no-addresses-message" class="text-gray-500 text-sm">Προσθέστε σημεία στη διαδρομή για να δείτε τις διευθύνσεις.</p>
             </div>
+            <div id="resizeHandle" class="resize-handle"></div>
         </div>
         
         <!-- Top Right Buttons -->
@@ -424,7 +448,7 @@
                 <input type="file" id="gpx-file-input" class="hidden" accept=".gpx">
                 <button id="downloadPDF" class="flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors shadow-sm" style="display: none;">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    Λήψη pdf διαδρομής
+                    Προεπισκόπηση PDF διαδρομής
                 </button>
             </div>
             
@@ -711,6 +735,54 @@
             return fullTableHtml;
         }
 
+        function getPdfWaypointsTableHtml(waypoints, isFirstPage, globalStartIndex = 0) {
+            const tableRowsHtml = waypoints.map((waypoint, index) => {
+                const pinNumber = globalStartIndex + index + 1;
+                let addressText;
+                switch (waypoint.status) {
+                    case 'success':
+                        addressText = waypoint.address || '-';
+                        break;
+                    case 'loading':
+                        addressText = 'Αναζήτηση...';
+                        break;
+                    case 'error':
+                        addressText = 'Μη διαθέσιμη';
+                        break;
+                    default: // 'empty' or other
+                        addressText = '-';
+                        break;
+                }
+                const coordsText = `${waypoint.lngLat.lat.toFixed(5)}, ${waypoint.lngLat.lng.toFixed(5)}`;
+
+                return `
+                    <div style="display: table-row; border-bottom: 1px solid #ccc;">
+                        <div style="display: table-cell; padding: 12px; text-align: center; width: 15%;">${pinNumber}</div>
+                        <div style="display: table-cell; padding: 12px; text-align: left; width: 55%;">${addressText}</div>
+                        <div style="display: table-cell; padding: 12px; text-align: center; width: 30%;">${coordsText}</div>
+                    </div>
+                `;
+            }).join('');
+
+            const title = isFirstPage ? 'Σημεία Διαδρομής' : 'Σημεία Διαδρομής (συνέχεια)';
+
+            return `
+                <h2 style="font-size: 20px; font-weight: bold; margin-top: 30px; margin-bottom: 10px; text-align: center;">${title}</h2>
+                <div style="display: table; width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;">
+                    <div style="display: table-header-group; font-weight: bold; break-inside: avoid;">
+                        <div style="display: table-row; border-bottom: 2px solid #555;">
+                            <div style="display: table-cell; padding: 12px; text-align: center; width: 15%;">Σημείο</div>
+                            <div style="display: table-cell; padding: 12px; text-align: left; width: 55%;">Διεύθυνση</div>
+                            <div style="display: table-cell; padding: 12px; text-align: center; width: 30%;">Συντεταγμένες</div>
+                        </div>
+                    </div>
+                    <div style="display: table-row-group;">
+                        ${tableRowsHtml}
+                    </div>
+                </div>
+            `;
+        }
+
         // Helper to measure the pixel height of the table header and a sample row.
         async function measurePdfElements(reportElement, sampleSegment) {
             const canvasScale = 2;
@@ -733,13 +805,64 @@
             return { headerHeight, rowHeight };
         }
 
+        async function measureWaypointsTableElements(reportElement, sampleWaypoint) {
+            const canvasScale = 2;
+            
+            // 1. Measure Header
+            const headerHtml = getPdfWaypointsTableHtml([], true); // Empty array, isFirstPage=true
+            reportElement.innerHTML = headerHtml;
+            const headerCanvas = await html2canvas(reportElement, { scale: canvasScale });
+            const headerHeight = headerCanvas.height;
+
+            // 2. Measure Header + One Row
+            const tableWithOneRowHtml = getPdfWaypointsTableHtml([sampleWaypoint], true);
+            reportElement.innerHTML = tableWithOneRowHtml;
+            const combinedCanvas = await html2canvas(reportElement, { scale: canvasScale });
+            const combinedHeight = combinedCanvas.height;
+
+            // 3. Calculate Row Height
+            const rowHeight = combinedHeight - headerHeight;
+
+            return { headerHeight, rowHeight };
+        }
+
         async function downloadRoutePDF() {
             if (!state.currentRoute) {
                 showMessage('Δεν υπάρχει διαδρομή για λήψη', 'error');
                 return;
             }
+
+            // Open the new tab immediately.
+            const newTab = window.open('', '_blank');
+
+            // Immediately try to bring focus back to the main window.
+            // This might not work in all browsers, but it's the best attempt.
+            window.focus();
+
+            if (!newTab) {
+                showMessage('Αποτυχία ανοίγματος νέας καρτέλας. Ελέγξτε τις ρυθμίσεις για pop-up.', 'error');
+                return;
+            }
+
+            // Write a clear, instructive message to the new tab.
+            const loadingMessage = `
+                <html>
+                    <head><title>Δημιουργία PDF</title></head>
+                    <body style="font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; background-color: #f0f0f0;">
+                        <h1 style="color: #333;">Η δημιουργία του PDF βρίσκεται σε εξέλιξη...</h1>
+                        <div style="background-color: #fff; border: 2px solid #F59E0B; border-radius: 8px; padding: 20px; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; width: 90%;">
+                            <p style="color: #F59E0B; font-size: 1.5em; font-weight: bold; margin: 0;">
+                                <span style="vertical-align: middle; margin-right: 10px;">⚠️</span> Παρακαλώ, επιστρέψτε στην καρτέλα του χάρτη για να ολοκληρωθεί η διαδικασία.
+                            </p>
+                        </div>
+                        <p style="color: #888; margin-top: 20px;">Αυτή η σελίδα θα ανανεωθεί αυτόματα μόλις το PDF είναι έτοιμο.</p>
+                    </body>
+                </html>`;
+            newTab.document.write(loadingMessage);
+
             if (typeof jspdf === 'undefined' || typeof html2canvas === 'undefined' || typeof htmlToImage === 'undefined') {
                 showMessage('Οι βιβλιοθήκες PDF ή εικόνας δεν έχουν φορτωθεί. Δοκιμάστε ξανά.', 'error');
+                newTab.close();
                 return;
             }
 
@@ -789,7 +912,41 @@
                 const statsImgHeight = statsCanvas.height * contentWidthMM / statsCanvas.width;
                 pdf.addImage(statsImgData, 'PNG', margin, margin, contentWidthMM, statsImgHeight);
 
-                // --- Pages 2...N: Slope Analysis Table ---
+                // --- Page 2...N: Waypoints Table ---
+                if (state.pinAddresses && state.pinAddresses.length > 0) {
+                    // 1. Measure
+                    const { headerHeight, rowHeight } = await measureWaypointsTableElements(reportElement, state.pinAddresses[0]);
+                    
+                    // 2. Calculate rows per page
+                    const pageCanvasHeight = reportElement.offsetWidth * canvasScale * (pdfHeight / pdfWidth);
+                    const contentCanvasHeight = pageCanvasHeight - (margin * 2 * (pageCanvasHeight / pdfHeight));
+                    
+                    let rowsPerPage = Math.floor((contentCanvasHeight - headerHeight) / rowHeight);
+                    if (rowsPerPage <= 0) rowsPerPage = 1;
+
+                    // 3. Chunk waypoints
+                    const chunks = [];
+                    for (let i = 0; i < state.pinAddresses.length; i += rowsPerPage) {
+                        chunks.push(state.pinAddresses.slice(i, i + rowsPerPage));
+                    }
+
+                    // 4. Render each chunk to a new page
+                    for (let i = 0; i < chunks.length; i++) {
+                        const chunk = chunks[i];
+                        const currentGlobalStartIndex = i * rowsPerPage; // Calculate the starting index for this chunk
+                        const tableHtml = getPdfWaypointsTableHtml(chunk, i === 0, currentGlobalStartIndex);
+                        
+                        reportElement.innerHTML = tableHtml;
+                        const tableCanvas = await html2canvas(reportElement, { scale: canvasScale });
+                        const tableImgData = tableCanvas.toDataURL('image/png');
+                        const tableImgHeight = tableCanvas.height * contentWidthMM / tableCanvas.width;
+                        
+                        pdf.addPage();
+                        pdf.addImage(tableImgData, 'PNG', margin, margin, contentWidthMM, tableImgHeight);
+                    }
+                }
+
+                // --- Pages 3...N: Slope Analysis Table ---
                 const segments = generateSteepnessReport(state.currentRoute.coordinates);
                 if (segments.length > 0) {
                     const totalSteepDistance = segments.reduce((total, seg) => total + (seg.isSteep ? seg.distance : 0), 0);
@@ -880,11 +1037,16 @@
 
                 pdf.addImage(mapImageData, 'PNG', posX, posY, finalImgW, finalImgH);
 
-                pdf.save('route-report.pdf');
+                // Generate the blob URL and redirect the already-opened tab.
+                const pdfBlob = pdf.output('blob');
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+                newTab.location.href = pdfUrl;
+                showMessage('Η δημιουργία του PDF ολοκληρώθηκε με επιτυχία.', 'success');
 
             } catch (error) {
                 console.error("PDF generation failed:", error);
                 showMessage('Η δημιουργία του PDF απέτυχε.', 'error');
+                newTab.close(); // Close the tab on error
             } finally {
                 document.body.removeChild(reportElement);
                 originalDisplays.forEach((display, el) => {
@@ -940,9 +1102,10 @@
             highlightedSuggestionIndex: -1,
             isSearchLoading: false,
             // Address Panel state
-            // Address Panel state
             pinAddresses: [], // Will be an array of {status, address, lngLat} objects
             isAddressPanelVisible: false,
+            isAddressPanelMoved: false,
+            lastTogglePosition: { top: '210px', left: '1rem' },
         };
 
         // --- ADDRESS PANEL LOGIC ---
@@ -1127,6 +1290,194 @@
                 }
             }
         }
+
+        function updateAddressListHeight() {
+            const panel = document.getElementById('addressPanel');
+            const header = document.getElementById('addressPanelHeader');
+            const list = document.getElementById('addressList');
+
+            if (!panel || !header || !list || panel.classList.contains('menu-hidden')) return;
+
+            const panelStyle = window.getComputedStyle(panel);
+            const headerStyle = window.getComputedStyle(header);
+
+            const panelPaddingTop = parseInt(panelStyle.paddingTop, 10);
+            const panelPaddingBottom = parseInt(panelStyle.paddingBottom, 10);
+            const headerTotalHeight = header.offsetHeight + parseInt(headerStyle.marginBottom, 10);
+            
+            const availableHeight = panel.offsetHeight - panelPaddingTop - panelPaddingBottom - headerTotalHeight;
+
+            list.style.maxHeight = Math.max(0, availableHeight) + 'px';
+        }
+
+        function adjustPanelHeightForContent() {
+            const panel = document.getElementById('addressPanel');
+            // Don't run if panel is hidden or has been manually resized by the user
+            if (!panel || panel.classList.contains('menu-hidden') || panel.style.height) {
+                return;
+            }
+
+            const header = document.getElementById('addressPanelHeader');
+            const numItems = state.pinAddresses.length;
+            if (numItems === 0) { // If list is empty, do nothing, let it be small
+                return;
+            }
+
+            const itemsToShow = Math.min(numItems, 5);
+            
+            // Estimate heights
+            const itemHeight = 44; // Approx height of one .address-item
+            const panelStyle = window.getComputedStyle(panel);
+            const headerStyle = window.getComputedStyle(header);
+            const panelPaddingTop = parseInt(panelStyle.paddingTop, 10);
+            const panelPaddingBottom = parseInt(panelStyle.paddingBottom, 10);
+            const headerTotalHeight = header.offsetHeight + parseInt(headerStyle.marginBottom, 10);
+
+            const targetListHeight = itemsToShow * itemHeight;
+            const targetPanelHeight = headerTotalHeight + targetListHeight + panelPaddingTop + panelPaddingBottom;
+
+            panel.style.height = targetPanelHeight + 'px';
+
+            // After setting the panel height, update the list's max-height to fill it
+            updateAddressListHeight();
+        }
+
+        function removePin(index) {
+            if (index < 0 || index >= state.pins.length) return;
+
+            state.pins.splice(index, 1);
+            state.pinAddresses.splice(index, 1);
+
+            redrawFromState();
+            saveState();
+            
+            // Adjust panel height if it's open
+            const panel = document.getElementById('addressPanel');
+            if(panel) panel.style.height = ''; // Clear manual height to allow auto-adjust
+            adjustPanelHeightForContent();
+        }
+
+        // --- DRAGGABLE ELEMENTS LOGIC ---
+        let isDragging = false; // Flag to differentiate between a drag and a click
+        function initializeDraggableElements() {
+            const addressPanel = document.getElementById('addressPanel');
+            const addressPanelHeader = document.getElementById('addressPanelHeader');
+            const addressToggleContainer = document.getElementById('addressToggleContainer');
+            const resizeHandle = document.getElementById('resizeHandle');
+
+            makeDraggable(addressPanel, addressPanelHeader);
+            makeDraggable(addressToggleContainer, addressToggleContainer);
+            makeResizable(addressPanel, resizeHandle);
+        }
+
+        function makeDraggable(elmnt, handle) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            
+            handle.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                isDragging = false; // Reset flag on mousedown
+                e = e || window.event;
+                e.preventDefault();
+                // get the mouse cursor position at startup:
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                // call a function whenever the cursor moves:
+                document.onmousemove = elementDrag;
+            }
+
+            function elementDrag(e) {
+                isDragging = true; // Set flag to true if mouse moves while dragging
+                e = e || window.event;
+                e.preventDefault();
+                // calculate the new cursor position:
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                
+                // Calculate new element position
+                let newTop = elmnt.offsetTop - pos2;
+                let newLeft = elmnt.offsetLeft - pos1;
+
+                // Boundary collision detection
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const elmntWidth = elmnt.offsetWidth;
+                const elmntHeight = elmnt.offsetHeight;
+
+                if (newLeft < 0) newLeft = 0;
+                if (newTop < 0) newTop = 0;
+                if (newLeft + elmntWidth > viewportWidth) newLeft = viewportWidth - elmntWidth;
+                if (newTop + elmntHeight > viewportHeight) newTop = viewportHeight - elmntHeight;
+
+                // set the element's new position:
+                elmnt.style.top = newTop + "px";
+                elmnt.style.left = newLeft + "px";
+
+                // If dragging the address panel, set the moved flag
+                if (elmnt.id === 'addressPanel') {
+                    state.isAddressPanelMoved = true;
+                }
+            }
+
+            function closeDragElement() {
+                // stop moving when mouse button is released:
+                document.onmouseup = null;
+                document.onmousemove = null;
+            }
+        }
+
+        function makeResizable(elmnt, handle) {
+            let initialWidth = 0, initialHeight = 0;
+            let initialX = 0, initialY = 0;
+            const minWidth = 280;
+            const minHeight = 200;
+
+            handle.onmousedown = resizeMouseDown;
+
+            function resizeMouseDown(e) {
+                e = e || window.event;
+                e.preventDefault();
+                e.stopPropagation(); // Prevent drag from starting
+
+                initialWidth = elmnt.offsetWidth;
+                initialHeight = elmnt.offsetHeight;
+                initialX = e.clientX;
+                initialY = e.clientY;
+
+                document.onmouseup = closeResizeElement;
+                document.onmousemove = elementResize;
+            }
+
+            function elementResize(e) {
+                e = e || window.event;
+                e.preventDefault();
+
+                const dx = e.clientX - initialX;
+                const dy = e.clientY - initialY;
+
+                let newWidth = initialWidth + dx;
+                let newHeight = initialHeight + dy;
+
+                if (newWidth < minWidth) newWidth = minWidth;
+                if (newHeight < minHeight) newHeight = minHeight;
+
+                elmnt.style.width = newWidth + 'px';
+                elmnt.style.height = newHeight + 'px';
+
+                // Update the list height dynamically on resize
+                if (elmnt.id === 'addressPanel') {
+                    updateAddressListHeight();
+                }
+            }
+
+            function closeResizeElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
+            }
+        }
                 // --- DUPLICATED BLOCK REMOVED ---
 
         let rightClickLatLng = null; // Stores the LngLat of the right-click event
@@ -1135,6 +1486,7 @@
         // --- UI ELEMENTS & SHARED VARIABLES ---
         let bottomPanel, hidePanelButton, showPanelButton;
         let activeSearchTooltip = null; // NEW: Variable to hold the active search result tooltip
+        let markerRemovalTimer = null; // Timer to control the removal of the elevation highlight marker
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', initApp);
@@ -1143,6 +1495,7 @@
             initMap();
             initUIElements();
             setupEventListeners();
+            initializeDraggableElements();
             
             if (!parseUrlAndRestore()) {
                 // saveState(); // TODO: Re-enable after refactoring saveState
@@ -1285,7 +1638,12 @@
             state.pins = [];
             state.pinAddresses = [];
             renderAddressList();
-            clearRoute(true)
+            clearRoute(true);
+            // After clearing, the panel should shrink. We need to clear its height
+            // so adjustPanelHeightForContent can work properly if it's re-opened.
+            const panel = document.getElementById('addressPanel');
+            if(panel) panel.style.height = '';
+            adjustPanelHeightForContent();
         });
             document.getElementById('downloadGPX').addEventListener('click', downloadGPX);
             document.getElementById('uploadGPX').addEventListener('click', () => document.getElementById('gpx-file-input').click());
@@ -1355,6 +1713,29 @@
             hidePanelButton.addEventListener('click', hideBottomPanel);
             showPanelButton.addEventListener('click', showBottomPanel);
 
+            // Event listeners for the elevation highlight marker
+            const bottomPanelEl = document.getElementById('bottomPanel');
+            bottomPanelEl.addEventListener('mouseleave', () => {
+                // Start a timer to remove the marker after 5 seconds
+                if (state.highlightMarker) {
+                    markerRemovalTimer = setTimeout(() => {
+                        if (state.highlightMarker) {
+                            state.highlightMarker.remove();
+                            state.highlightMarker = null;
+                        }
+                        markerRemovalTimer = null;
+                    }, 5000);
+                }
+            });
+
+            bottomPanelEl.addEventListener('mouseenter', () => {
+                // If the mouse re-enters, cancel the removal timer
+                if (markerRemovalTimer) {
+                    clearTimeout(markerRemovalTimer);
+                    markerRemovalTimer = null;
+                }
+            });
+
             // Toggles listeners
             document.getElementById('roundTripToggle').addEventListener('change', handleRoundTripToggle);
             document.getElementById('steepUphillToggle').addEventListener('change', handleSteepUphillToggle);
@@ -1389,21 +1770,108 @@
             });
 
             // Address Panel listeners
+            const addressToggleContainer = document.getElementById('addressToggleContainer');
             const addressToggle = document.getElementById('addressToggle');
             const addressPanel = document.getElementById('addressPanel');
             const addressPanelClose = document.getElementById('addressPanelClose');
 
             addressToggle.addEventListener('click', () => {
-                state.isAddressPanelVisible = !state.isAddressPanelVisible;
-                addressPanel.classList.toggle('menu-hidden', !state.isAddressPanelVisible);
-                if (state.isAddressPanelVisible) {
-                    renderAddressList(); // Render the current state when opening
+                if (isDragging) {
+                    isDragging = false; // Reset flag for next interaction
+                    return; // This was a drag, not a click. Ignore.
                 }
+
+                // Store the toggle's current position before showing the panel
+                state.lastTogglePosition = {
+                    top: addressToggleContainer.offsetTop,
+                    left: addressToggleContainer.offsetLeft
+                };
+                // Reset the moved flag every time the panel is opened
+                state.isAddressPanelMoved = false;
+
+                // Reset panel size to default before showing
+                addressPanel.style.width = '';
+                addressPanel.style.height = '';
+
+                // Position the panel at the toggle's location, with edge correction
+                let newTop = state.lastTogglePosition.top;
+                let newLeft = state.lastTogglePosition.left;
+
+                const panelWidth = addressPanel.offsetWidth;
+                const panelHeight = addressPanel.offsetHeight;
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                if (newLeft + panelWidth > viewportWidth) {
+                    newLeft = viewportWidth - panelWidth;
+                }
+                if (newTop + panelHeight > viewportHeight) {
+                    newTop = viewportHeight - panelHeight;
+                }
+                if (newLeft < 0) newLeft = 0;
+                if (newTop < 0) newTop = 0;
+
+                addressPanel.style.top = newTop + 'px';
+                addressPanel.style.left = newLeft + 'px';
+
+                // Show panel, hide toggle button
+                addressPanel.classList.remove('menu-hidden');
+                addressToggleContainer.classList.add('hidden');
+
+                state.isAddressPanelVisible = true;
+                renderAddressList();
+                // Use a short timeout to allow the browser to render the panel
+                // before calculating its height.
+                setTimeout(() => {
+                    // First, auto-adjust the panel height based on content (up to 5 items)
+                    adjustPanelHeightForContent();
+                    // Then, ensure the inner list's max-height is correct for the new panel height
+                    updateAddressListHeight();
+                }, 50);
             });
 
             addressPanelClose.addEventListener('click', () => {
-                state.isAddressPanelVisible = false;
+                let targetPosition;
+                // If panel was not moved, use the toggle's last saved position
+                if (!state.isAddressPanelMoved) {
+                    targetPosition = {
+                        top: state.lastTogglePosition.top,
+                        left: state.lastTogglePosition.left
+                    };
+                } else {
+                    // If panel was moved, use the panel's current position
+                    targetPosition = {
+                        top: addressPanel.offsetTop,
+                        left: addressPanel.offsetLeft
+                    };
+                }
+
+                // Position the toggle at the target location, with edge correction
+                let newLeft = targetPosition.left;
+                let newTop = targetPosition.top;
+
+                const toggleWidth = addressToggleContainer.offsetWidth;
+                const toggleHeight = addressToggleContainer.offsetHeight;
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                if (newLeft + toggleWidth > viewportWidth) {
+                    newLeft = viewportWidth - toggleWidth;
+                }
+                if (newTop + toggleHeight > viewportHeight) {
+                    newTop = viewportHeight - toggleHeight;
+                }
+                if (newLeft < 0) newLeft = 0;
+                if (newTop < 0) newTop = 0;
+                
+                addressToggleContainer.style.left = newLeft + 'px';
+                addressToggleContainer.style.top = newTop + 'px';
+
+                // Hide panel, show toggle button
                 addressPanel.classList.add('menu-hidden');
+                addressToggleContainer.classList.remove('hidden');
+
+                state.isAddressPanelVisible = false;
             });
 
             document.getElementById('addressPanelReload').addEventListener('click', () => {
@@ -1499,13 +1967,6 @@
                                 // A final check in case the user cleared the route while the style was changing
                                 if (state.currentRoute) {
                                     displayColoredRoute(state.currentRoute.coordinates);
-                                }
-                            });
-                
-                            document.getElementById('elevationChart').addEventListener('mouseleave', () => {
-                                if (state.highlightMarker) {
-                                    state.highlightMarker.remove();
-                                    state.highlightMarker = null;
                                 }
                             });
                         }
@@ -1613,6 +2074,7 @@
             
             redrawFromState();
             updateUndoButton();
+            setTimeout(adjustPanelHeightForContent, 50);
         }
 
         function redrawFromState() {
@@ -1817,6 +2279,7 @@
                     redrawFromState();
                     saveState();
                     showMessage(`Η διαδρομή από το αρχείο GPX φορτώθηκε με ${newPins.length} σημεία.`, 'success');
+                    setTimeout(adjustPanelHeightForContent, 50);
 
                 } catch (error) {
                     console.error("GPX parsing error:", error);
@@ -1853,6 +2316,7 @@
             }
             saveState();
             updateUIState();
+            adjustPanelHeightForContent();
         }
         
         function handleMapRightClick(e) {
