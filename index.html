@@ -354,6 +354,31 @@
             }
         }
 
+        /* Shine effect for bottomPanel */
+        @keyframes shine-effect {
+            to {
+                transform: translateX(100%);
+            }
+        }
+
+        #bottomPanel {
+            overflow: hidden; /* Ensure the shine effect is contained */
+        }
+
+        #bottomPanel.is-opening::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: translateX(-100%);
+            background: linear-gradient(100deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 65%);
+            animation: shine-effect 3.5s cubic-bezier(0.25, 0.46, 0.45, 0.94); /* Duration 3.5s, No Delay */
+            z-index: 1; /* To be on top of the panel's content but below the hide button */
+            pointer-events: none; /* So it doesn't interfere with mouse events */
+        }
+
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -550,12 +575,24 @@
         <div id="stats-panel" class="w-full lg:w-[30%] p-4 border-r border-gray-200/50 overflow-y-auto h-1/2 lg:h-full">
             <h2 class="text-lg font-bold mb-4 text-gray-800 text-center">Στατιστικά Διαδρομής</h2>
             <div id="stats-content" class="grid grid-cols-4 gap-3">
+                <!-- Route Name -->
+                <div class="col-span-4 text-center p-3 rounded-lg shadow-md">
+                    <div class="text-gray-700 text-xs uppercase tracking-wider font-semibold">Όνομα Διαδρομής</div>
+                    <div id="routeNameContainer" class="flex items-center justify-center gap-2 mt-1">
+                        <span id="routeName" class="font-bold text-xl text-gray-800 cursor-pointer" title="Κάντε κλικ για επεξεργασία">--</span>
+                        <button id="editRouteNameBtn" class="p-1 rounded-full hover:bg-gray-200 transition-colors">
+                            <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z"></path></svg>
+                        </button>
+                    </div>
+                    <input type="text" id="routeNameInput" class="hidden w-full text-center font-bold text-xl bg-gray-100 border-b-2 border-blue-500 focus:outline-none">
+                </div>
+                
                 <!-- Total Distance -->
                 <div class="col-span-4 text-center p-3 rounded-lg shadow-md">
                     <div class="text-gray-700 text-xs uppercase tracking-wider font-semibold">Συνολική Απόσταση</div>
                     <div id="totalDistance" class="font-bold text-3xl text-blue-600 mt-1">--</div>
                 </div>
-                
+
                 <!-- Steep Uphill -->
                 <div class="col-span-4 text-center p-2 rounded-lg shadow-md">
                     <div class="text-gray-700 text-xs uppercase tracking-wider font-semibold leading-tight">Μήκος Απότομης Ανάβασης (&gt;5%)</div>
@@ -669,9 +706,10 @@
             const totalDistance = document.getElementById('totalDistance').textContent;
             const steepUphillDistance = document.getElementById('steepUphillDistance').textContent;
             const elevationGain = document.getElementById('elevationGain').textContent;
+            const routeName = (state.routeName && state.routeName !== '--') ? ` "${state.routeName}"` : '';
 
             return `
-                <h1 style="font-size: 24px; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; text-align: center;">Αναφορά Διαδρομής</h1>
+                <h1 style="font-size: 24px; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; text-align: center;">Αναφορά Διαδρομής${routeName}</h1>
                 <h2 style="font-size: 20px; font-weight: bold; margin-bottom: 10px; text-align: center;">Στατιστικά</h2>
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 16px;">
                     <tr style="border-bottom: 1px solid #ccc;"><td style="padding: 8px; font-weight: bold;">Συνολική Απόσταση:</td><td style="padding: 8px;">${totalDistance}</td></tr>
@@ -826,46 +864,44 @@
             return { headerHeight, rowHeight };
         }
 
+        function showPdfBlockedDialog(pdfUrl) {
+            const dialog = document.getElementById('pdf-blocked-dialog');
+            const confirmBtn = document.getElementById('pdf-open-confirm');
+            const cancelBtn = document.getElementById('pdf-open-cancel');
+
+            // This function will be the event handler.
+            const handleConfirm = () => {
+                window.open(pdfUrl, '_blank');
+                hideDialog();
+            };
+
+            const hideDialog = () => {
+                dialog.classList.add('hidden');
+                // Clean up listeners to prevent them from stacking up if the dialog is shown multiple times.
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', hideDialog);
+            };
+
+            // Attach the listeners
+            confirmBtn.addEventListener('click', handleConfirm);
+            cancelBtn.addEventListener('click', hideDialog);
+
+            // Show the dialog
+            dialog.classList.remove('hidden');
+        }
+
         async function downloadRoutePDF() {
             if (!state.currentRoute) {
                 showMessage('Δεν υπάρχει διαδρομή για λήψη', 'error');
                 return;
             }
 
-            // Open the new tab immediately.
-            const newTab = window.open('', '_blank');
-
-            // Immediately try to bring focus back to the main window.
-            // This might not work in all browsers, but it's the best attempt.
-            window.focus();
-
-            if (!newTab) {
-                showMessage('Αποτυχία ανοίγματος νέας καρτέλας. Ελέγξτε τις ρυθμίσεις για pop-up.', 'error');
-                return;
-            }
-
-            // Write a clear, instructive message to the new tab.
-            const loadingMessage = `
-                <html>
-                    <head><title>Δημιουργία PDF</title></head>
-                    <body style="font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; background-color: #f0f0f0;">
-                        <h1 style="color: #333;">Η δημιουργία του PDF βρίσκεται σε εξέλιξη...</h1>
-                        <div style="background-color: #fff; border: 2px solid #F59E0B; border-radius: 8px; padding: 20px; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; width: 90%;">
-                            <p style="color: #F59E0B; font-size: 1.5em; font-weight: bold; margin: 0;">
-                                <span style="vertical-align: middle; margin-right: 10px;">⚠️</span> Παρακαλώ, επιστρέψτε στην καρτέλα του χάρτη για να ολοκληρωθεί η διαδικασία.
-                            </p>
-                        </div>
-                        <p style="color: #888; margin-top: 20px;">Αυτή η σελίδα θα ανανεωθεί αυτόματα μόλις το PDF είναι έτοιμο.</p>
-                    </body>
-                </html>`;
-            newTab.document.write(loadingMessage);
-
             if (typeof jspdf === 'undefined' || typeof html2canvas === 'undefined' || typeof htmlToImage === 'undefined') {
                 showMessage('Οι βιβλιοθήκες PDF ή εικόνας δεν έχουν φορτωθεί. Δοκιμάστε ξανά.', 'error');
-                newTab.close();
                 return;
             }
 
+            showMessage('Η δημιουργία του PDF βρίσκεται σε εξέλιξη...', 'success');
             showLoading(true);
 
             // --- Setup ---
@@ -892,7 +928,7 @@
             const elementsToHide = [
                 document.getElementById('menuPanel'),
                 document.getElementById('topRightControls'),
-                document.getElementById('addressToggle'),
+                document.getElementById('addressToggleContainer'),
                 document.getElementById('addressPanel'),
                 document.getElementById('instructions'),
                 document.getElementById('messageOverlay'),
@@ -1037,16 +1073,18 @@
 
                 pdf.addImage(mapImageData, 'PNG', posX, posY, finalImgW, finalImgH);
 
-                // Generate the blob URL and redirect the already-opened tab.
+                // Generate the blob URL and open it in a new tab.
                 const pdfBlob = pdf.output('blob');
                 const pdfUrl = URL.createObjectURL(pdfBlob);
-                newTab.location.href = pdfUrl;
-                showMessage('Η δημιουργία του PDF ολοκληρώθηκε με επιτυχία.', 'success');
+                
+                const newTab = window.open(pdfUrl, '_blank');
+                if (!newTab) {
+                    showPdfBlockedDialog(pdfUrl);
+                }
 
             } catch (error) {
                 console.error("PDF generation failed:", error);
                 showMessage('Η δημιουργία του PDF απέτυχε.', 'error');
-                newTab.close(); // Close the tab on error
             } finally {
                 document.body.removeChild(reportElement);
                 originalDisplays.forEach((display, el) => {
@@ -1105,10 +1143,243 @@
             pinAddresses: [], // Will be an array of {status, address, lngLat} objects
             isAddressPanelVisible: false,
             isAddressPanelMoved: false,
-            lastTogglePosition: { top: '210px', left: '1rem' },
+            // Route Naming state
+            routeName: '',
+            isRouteNameUserModified: false,
         };
 
         // --- ADDRESS PANEL LOGIC ---
+
+        // --- ROUTE NAMING LOGIC ---
+
+        /**
+         * Parses a raw address string from the geocoding API into structured components.
+         * This is a heuristic-based parser.
+         * @param {string} addressString The full address string.
+         * @returns {object} An object with { street, city, country }.
+         */
+                function parseAddress(addressString) {
+                    if (!addressString || typeof addressString !== 'string') {
+                        return { street: null, city: null, country: null };
+                    }
+        
+                    const parts = addressString.split(',').map(p => p.trim());
+                    if (parts.length === 0) {
+                        return { street: null, city: null, country: null };
+                    }
+        
+                    // The most specific place name is almost always the first part.
+                    let street = parts[0] || null;
+        
+                    // The country is always the last part.
+                    const country = parts[parts.length - 1] || null;
+        
+                    // The city is usually the second-to-last part.
+                    let city = (parts.length > 1) ? parts[parts.length - 2] : null;
+        
+                    // Clean up city (remove postal codes)
+                    if (city) {
+                        city = city.replace(/\d/g, '').trim();
+                    }
+                    
+                    // If we only have two parts, e.g., "Ioannina, Greece", then:
+                    // street = "Ioannina", country = "Greece", city = "Ioannina". This is correct.
+                    if (parts.length === 2) {
+                        city = street;
+                    }
+        
+                    // Remove trailing numbers from the street name
+                    if (street) {
+                        street = street.replace(/\s+\d+$/, '').trim();
+                    }
+        
+                    return { street, city, country };
+                }
+
+        /**
+         * Generates and sets the default route name based on the first and last pins.
+         */
+        function generateDefaultRouteName() {
+            if (state.isRouteNameUserModified || state.pinAddresses.length < 1) {
+                if(state.pinAddresses.length < 1) {
+                    state.routeName = '--';
+                    updateRouteNameUI();
+                }
+                return;
+            }
+
+            const startPin = state.pinAddresses[0];
+            const endPin = state.pinAddresses[state.pinAddresses.length - 1];
+
+            if (!startPin) {
+                state.routeName = '--';
+                updateRouteNameUI();
+                return;
+            }
+
+            // Handle loading state
+            if (startPin.status === 'loading' || (state.pinAddresses.length > 1 && endPin.status === 'loading')) {
+                state.routeName = 'Δημιουργία ονόματος...';
+                updateRouteNameUI();
+                return;
+            }
+            
+            // Handle single pin case
+            if (state.pinAddresses.length === 1) {
+                 if (startPin.status === 'success') {
+                    state.routeName = startPin.address;
+                } else {
+                    state.routeName = 'Αναμένεται σημείο...'
+                }
+                updateRouteNameUI();
+                return;
+            }
+
+            // Handle round trip
+            if (state.isRoundTrip) {
+                if (startPin.status === 'success') {
+                    const startAddr = parseAddress(startPin.address);
+                    state.routeName = `${startAddr.city || startAddr.street}, ${startAddr.street} (Κυκλική)`;
+                } else {
+                    state.routeName = 'Κυκλική Διαδρομή';
+                }
+                updateRouteNameUI();
+                return;
+            }
+
+            // Handle normal two-or-more-pin route
+            if (startPin.status === 'success' && endPin.status === 'success') {
+                const startAddr = parseAddress(startPin.address);
+                const endAddr = parseAddress(endPin.address);
+
+                // Helper to format a location part, avoiding duplicates for villages/POIs
+                const formatPart = (addr) => {
+                    if (!addr.city) return addr.street || '';
+                    if (!addr.street) return addr.city || '';
+                    // If street and city are the same (common for villages), just use one.
+                    if (addr.street === addr.city) {
+                        return addr.city;
+                    }
+                    // Otherwise, combine them.
+                    return `${addr.city}, ${addr.street}`;
+                };
+
+                const startPart = formatPart(startAddr);
+                const endPart = formatPart(endAddr);
+
+                if (startAddr.country !== endAddr.country) {
+                    state.routeName = `${startAddr.country}, ${startPart} → ${endAddr.country}, ${endPart}`;
+                } else if (startAddr.city !== endAddr.city) {
+                    state.routeName = `${startPart} → ${endPart}`;
+                } else { // Same city
+                    if (startAddr.street === endAddr.street) {
+                         state.routeName = `${startAddr.city}: ${startAddr.street}`;
+                    } else {
+                         state.routeName = `${startAddr.city}: ${startAddr.street} → ${endAddr.street}`;
+                    }
+                }
+            } else {
+                state.routeName = 'Επεξεργασία διαδρομής...';
+            }
+            
+            updateRouteNameUI();
+        }
+
+        /**
+         * Updates the route name display in the UI.
+         */
+        function updateRouteNameUI() {
+            const routeNameSpan = document.getElementById('routeName');
+            if (routeNameSpan) {
+                routeNameSpan.textContent = state.routeName || '--';
+                routeNameSpan.title = state.routeName || 'Κάντε κλικ για επεξεργασία';
+            }
+        }
+
+        /**
+         * Initializes event listeners for the route name editing functionality.
+         */
+        function setupRouteNameEditing() {
+            const container = document.getElementById('routeNameContainer');
+            const display = document.getElementById('routeName');
+            const editButton = document.getElementById('editRouteNameBtn');
+            const input = document.getElementById('routeNameInput');
+
+            let lastGeneratedDefaultName = ''; // To store the default name before editing
+
+            const startEditing = () => {
+                if (state.pins.length === 0) return;
+
+                // Store the current name, whether it's default or custom.
+                const currentName = state.routeName;
+
+                // Temporarily disable the user-modified flag to force generation of the default name.
+                const tempIsUserModified = state.isRouteNameUserModified;
+                state.isRouteNameUserModified = false; 
+                
+                // Generate and capture the most up-to-date default name for potential reverts.
+                generateDefaultRouteName(); 
+                lastGeneratedDefaultName = state.routeName; 
+                
+                // Restore the user-modified flag.
+                state.isRouteNameUserModified = tempIsUserModified; 
+
+                // If the name was user-modified, restore the user's custom name to the state.
+                // Otherwise, state.routeName already holds the latest default name.
+                if (state.isRouteNameUserModified) {
+                    state.routeName = currentName;
+                }
+
+                display.classList.add('hidden');
+                editButton.classList.add('hidden');
+                input.classList.remove('hidden');
+                input.value = state.routeName; // This will now be the user's custom name if it existed.
+                input.focus();
+                input.select();
+            };
+
+            const stopEditing = () => {
+                const newName = input.value.trim();
+                
+                // If the new name is empty, revert to the last generated default name
+                if (!newName) {
+                    state.routeName = lastGeneratedDefaultName;
+                    state.isRouteNameUserModified = false;
+                } else if (newName === lastGeneratedDefaultName) {
+                    // If the user typed back the default name, treat it as not user-modified
+                    state.routeName = newName;
+                    state.isRouteNameUserModified = false;
+                } else {
+                    // User provided a truly custom name
+                    let finalName = newName;
+                    if (newName.length > 60) {
+                        finalName = newName.substring(0, 60);
+                        showMessage('Το όνομα διαδρομής περικόπηκε στους 60 χαρακτήρες.', 'warning');
+                    }
+                    state.routeName = finalName;
+                    state.isRouteNameUserModified = true;
+                }
+                
+                updateRouteNameUI();
+                display.classList.remove('hidden');
+                editButton.classList.remove('hidden');
+                input.classList.add('hidden');
+                saveState();
+            };
+
+            display.addEventListener('click', startEditing);
+            editButton.addEventListener('click', startEditing);
+            
+            input.addEventListener('blur', stopEditing);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    input.blur(); // This will trigger the stopEditing logic
+                } else if (e.key === 'Escape') {
+                    input.value = state.routeName; // Revert changes
+                    input.blur();
+                }
+            });
+        }
 
         /**
          * Renders the list of addresses in the address panel based on the current state.
@@ -1250,6 +1521,7 @@
                 if (typeof address === 'string' || address instanceof String) {
                     item.address = address;
                     item.status = 'success';
+                    generateDefaultRouteName(); // Update route name when an address is fetched
                 } else {
                     throw new Error("Invalid address format received.");
                 }
@@ -1495,6 +1767,7 @@
             initMap();
             initUIElements();
             setupEventListeners();
+            setupRouteNameEditing();
             initializeDraggableElements();
             
             if (!parseUrlAndRestore()) {
@@ -2102,6 +2375,7 @@
                 clearRoute(false); // This will also need refactoring
             }
             updateUIState();
+            generateDefaultRouteName();
         }
         
         // --- SHARE & URL FUNCTIONALITY ---
@@ -2944,6 +3218,19 @@
                         // --- UI UPDATES & DISPLAY ---
                         function showBottomPanel() {
                             if (!state.currentRoute) return;
+
+                            // Only trigger the shine animation if the panel is not already visible.
+                            if (!bottomPanel.classList.contains('is-visible')) {
+                                // Add the class to trigger the shine animation
+                                bottomPanel.classList.add('is-opening');
+                                
+                                // Remove the animation class after it has finished
+                                // Animation duration is 3.5s with no delay, so total 3.5s
+                                setTimeout(() => {
+                                    bottomPanel.classList.remove('is-opening');
+                                }, 3500);
+                            }
+                            
                             bottomPanel.classList.add('is-visible');
                             showPanelButton.classList.add('hidden');
                         }
@@ -3195,6 +3482,11 @@
                                 document.getElementById('steepUphillToggle').checked = false;
                                 state.showSteepHighlight = false;
                                 
+                                // Reset route name state
+                                state.routeName = '';
+                                state.isRouteNameUserModified = false;
+                                generateDefaultRouteName();
+
                                 state.history = [];
                                 state.historyIndex = -1;
                                 saveState();
@@ -3377,5 +3669,17 @@
             document.getElementById('no-stats-message').classList.toggle('hidden', show);
         }
     </script>
+
+        <!-- PDF Blocked Dialog -->
+        <div id="pdf-blocked-dialog" class="absolute inset-0 bg-black/30 z-[6000] flex items-center justify-center hidden" style="backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);">
+            <div class="rounded-lg shadow-xl p-6 w-full max-w-md text-center bg-white/60 border border-white/30" style="backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+                <h3 class="text-lg font-bold text-gray-900 mb-3">Το PDF είναι έτοιμο</h3>
+                <p class="text-gray-800 font-medium mb-6">Ο browser σας εμπόδισε το αυτόματο άνοιγμα της προεπισκόπησης. Πατήστε "Άνοιγμα" για να τη δείτε σε νέα καρτέλα.</p>
+                <div class="flex justify-center gap-4">
+                    <button id="pdf-open-confirm" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Άνοιγμα</button>
+                    <button id="pdf-open-cancel" class="px-6 py-2 bg-gray-200/80 text-gray-800 font-semibold rounded-md hover:bg-gray-300 transition-colors shadow-sm">Ακύρωση</button>
+                </div>
+            </div>
+        </div>
 </body>
 </html>
